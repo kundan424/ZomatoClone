@@ -1,0 +1,8 @@
+package com.zomato.clone.order.repository;
+
+import com.zomato.clone.order.entity.Order;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface OrderRepository extends JpaRepository <Order, Long> {
+
+}
