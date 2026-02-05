@@ -79,7 +79,7 @@ public class RestaurantController {
      * @param principal    represents the authenticated user
      * @return newly created MenuItem
      */
-    @PostMapping
+    @PostMapping("/{restaurantId}/menu")
     public ResponseEntity<MenuItem> addMenuItem(
             @PathVariable Long restaurantId,
             @RequestBody MenuItemRequest request,
