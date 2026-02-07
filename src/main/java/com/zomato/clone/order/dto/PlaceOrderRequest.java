@@ -9,9 +9,6 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class PlaceOrderRequest {
 
     private Long restaurantId;
@@ -27,7 +24,6 @@ public class PlaceOrderRequest {
      * order item details inside the parent request.
      */
     @Data
-    @Builder
     public static class OrderItemRequest {
         private Long menuItemId;
         private Integer quantity;
