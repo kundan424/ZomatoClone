@@ -99,7 +99,14 @@
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
-	</dependencies>
+        <dependency>
+            <groupId>com.stripe</groupId>
+            <artifactId>stripe-java</artifactId>
+            <version>24.15.0</version>
+        </dependency>
+
+
+    </dependencies>
 
 	<build>
 		<plugins>
