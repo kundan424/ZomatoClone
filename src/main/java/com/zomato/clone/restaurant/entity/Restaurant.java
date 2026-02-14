@@ -1,5 +1,6 @@
 package com.zomato.clone.restaurant.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.zomato.clone.order.entity.Order;
 import com.zomato.clone.user.entity.User;
 import jakarta.persistence.*;
@@ -31,6 +32,7 @@ public class Restaurant {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id", nullable = false)
+    @JsonIgnore
     private User owner; // The user who owns this restaurant, Many restaurants can belong to one owner.
 
     @Column(nullable = false)
@@ -49,6 +51,7 @@ public class Restaurant {
 
     // Orders received by this restaurant.
     @OneToMany(mappedBy = "restaurant")
+    @JsonIgnore
     private List<Order> orders;
 
     @CreationTimestamp

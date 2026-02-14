@@ -9,11 +9,13 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class PlaceOrderRequest {
 
     private Long restaurantId;
     private List<OrderItemRequest> items;
-
 
     /**
      * OrderItemRequest represents an individual menu item

@@ -1,5 +1,6 @@
 package com.zomato.clone.user.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.zomato.clone.enums.UserRole;
 import com.zomato.clone.order.entity.Order;
 import com.zomato.clone.restaurant.entity.Restaurant;
@@ -50,6 +51,7 @@ public class User {
 
     // One User can have multiple Orders (Order Module)
     @OneToMany(mappedBy = "user")
+    @JsonIgnore
     private List<Order> orders;
 
     @CreationTimestamp

@@ -16,10 +16,12 @@ import com.zomato.clone.restaurant.repository.RestaurantRepository;
 import com.zomato.clone.user.entity.User;
 import com.zomato.clone.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -32,6 +34,9 @@ public class OrderService {
     private final UserRepository userRepo;
     private final RestaurantRepository restaurantRepo;
     private final MenuItemRepository menuItemRepo;
+
+
+    private final StringRedisTemplate redisTemplate;
 
     public OrderResponse placeOrder(PlaceOrderRequest request, String userEmail) {
 
@@ -55,31 +60,53 @@ public class OrderService {
 
         // process each data
         for (PlaceOrderRequest.OrderItemRequest itemRequest : request.getItems()) {
-            MenuItem menuItem = menuItemRepo.findById(itemRequest.getMenuItemId())
-                    .orElseThrow(() -> new RuntimeException("Menu Item not found"));
+            Long menuItemId = itemRequest.getMenuItemId();
+            String lockKey = "lock:item:" + menuItemId;
 
-            // check Availability
-            if (menuItem.getAvailableQuantity() < itemRequest.getQuantity()) {
-                throw new RuntimeException("item " + menuItem.getName() + " is out of stock");
+            // 1. TRY TO ACQUIRE LOCK
+            // setIfAbsent is ATOMIC. Only one thread can succeed.
+
+            Boolean acquired = redisTemplate.opsForValue().setIfAbsent(
+                    lockKey,
+                    "LOCKED",
+                    Duration.ofSeconds(10) // Lock expires in 10s (Safety net if server crashes)
+            );
+
+            if (Boolean.FALSE.equals(acquired)) {
+                throw new RuntimeException("Item is currently being processed by another user. Please try again.");
             }
 
-            // Deduct Inventory (Simple Logic for V1 - V2 will use Redis Locking)
-            menuItem.setAvailableQuantity(menuItem.getAvailableQuantity() - itemRequest.getQuantity());
-            menuItemRepo.save(menuItem);
+            try {
+                MenuItem menuItem = menuItemRepo.findById(menuItemId)
+                        .orElseThrow(() -> new RuntimeException("Menu Item not found"));
 
-            // create order item
-            OrderItem orderItem = OrderItem.builder()
-                    .order(order)
-                    .menuItem(menuItem)
-                    .quantity(itemRequest.getQuantity())
-                    .price(menuItem.getPrice())
-                    .build();
+                // check Availability
+                if (menuItem.getAvailableQuantity() < itemRequest.getQuantity()) {
+                    throw new RuntimeException("item " + menuItem.getName() + " is out of stock");
+                }
 
-            order.getOrderItems().add(orderItem);
+                // Deduct Inventory (Simple Logic for V1 - V2 will use Redis Locking)
+                menuItem.setAvailableQuantity(menuItem.getAvailableQuantity() - itemRequest.getQuantity());
+                menuItemRepo.save(menuItem);
 
-            // calculate the total
-            BigDecimal itemTotal = menuItem.getPrice().multiply(BigDecimal.valueOf(itemRequest.getQuantity()));
-            totalAmount = totalAmount.add(itemTotal);
+                // create order item
+                OrderItem orderItem = OrderItem.builder()
+                        .order(order)
+                        .menuItem(menuItem)
+                        .quantity(itemRequest.getQuantity())
+                        .price(menuItem.getPrice())
+                        .build();
+
+                order.getOrderItems().add(orderItem);
+
+                // calculate the total
+                BigDecimal itemTotal = menuItem.getPrice().multiply(BigDecimal.valueOf(itemRequest.getQuantity()));
+                totalAmount = totalAmount.add(itemTotal);
+
+            } finally {
+                // 3. RELEASE LOCK (Always happen, even if error)
+                redisTemplate.delete(lockKey);
+            }
         }
 
         // save order

@@ -10,6 +10,9 @@ import com.zomato.clone.restaurant.repository.RestaurantRepository;
 import com.zomato.clone.user.entity.User;
 import com.zomato.clone.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.annotations.Cache;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +65,7 @@ public class RestaurantService {
      * @throws RuntimeException if user is not a restaurant owner
      */
     @Transactional
+
     public Restaurant createRestaurant(CreateRestaurantRequest request, String userEmail) {
 
         // fetch the authenticated user
@@ -102,6 +106,7 @@ public class RestaurantService {
      * @throws RuntimeException if user is not the restaurant owner
      */
     @Transactional
+    @CacheEvict(value = "menu" , key = "#restaurantId")
     public MenuItem addMenuItem(Long restaurantId, MenuItemRequest request, String userEmail) {
         Restaurant restaurant = restaurantRepo.findById(restaurantId)
                 .orElseThrow(() -> new RuntimeException("Restaurant not found"));
@@ -145,6 +150,8 @@ public class RestaurantService {
      * @param restaurantId ID of the restaurant
      * @return list of menu items belonging to the restaurant
      */
+    // CACHE: This reads from Redis first!
+    @Cacheable(value = "menu", key = "#restaurantId")
     public List<MenuItem> getMenu(Long restaurantId) {
         return menuItemRepo.findByRestaurantId(restaurantId);
     }
