@@ -15,6 +15,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -24,21 +26,24 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class) // Initializes Mocks
+@ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
 
     @Mock private OrderRepository orderRepo;
     @Mock private UserRepository userRepo;
     @Mock private RestaurantRepository restaurantRepo;
     @Mock private MenuItemRepository menuItemRepo;
+    @Mock private StringRedisTemplate redisTemplate;
+    @Mock private ValueOperations<String, String> valueOperations;
 
     @InjectMocks
-    private OrderService orderService; // Injects mocks into service
+    private OrderService orderService;
 
     @Test
     void shouldPlaceOrderSuccessfully() {
-        // 1. ARRAGE (Prepare Mock Data)
+
         String userEmail = "test@example.com";
+
         User mockUser = User.builder().email(userEmail).id(1L).build();
         Restaurant mockRestaurant = Restaurant.builder().id(10L).name("Pizza Hut").build();
         MenuItem mockItem = MenuItem.builder()
@@ -49,31 +54,39 @@ class OrderServiceTest {
 
         PlaceOrderRequest request = new PlaceOrderRequest();
         request.setRestaurantId(10L);
-        PlaceOrderRequest.OrderItemRequest itemReq = new PlaceOrderRequest.OrderItemRequest();
+
+        PlaceOrderRequest.OrderItemRequest itemReq =
+                new PlaceOrderRequest.OrderItemRequest();
         itemReq.setMenuItemId(100L);
         itemReq.setQuantity(2);
+
         request.setItems(List.of(itemReq));
 
-        // Define Mock Behavior
+        // Mock Redis
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), any()))
+                .thenReturn(true);
+        when(redisTemplate.delete(anyString())).thenReturn(true);
+
+        // Mock DB
         when(userRepo.findByEmail(userEmail)).thenReturn(Optional.of(mockUser));
         when(restaurantRepo.findById(10L)).thenReturn(Optional.of(mockRestaurant));
         when(menuItemRepo.findById(100L)).thenReturn(Optional.of(mockItem));
         when(orderRepo.save(any(Order.class))).thenAnswer(invocation -> {
             Order saved = invocation.getArgument(0);
-            saved.setId(555L); // Simulate DB ID generation
+            saved.setId(555L);
             return saved;
         });
 
-        // 2. ACT (Run the method)
+        // ACT
         OrderResponse response = orderService.placeOrder(request, userEmail);
 
-        // 3. ASSERT (Verify results)
+        // ASSERT
         assertNotNull(response);
-        assertEquals(BigDecimal.valueOf(20.00), response.getTotalAmount()); // 2 * 10.00
+        assertEquals(BigDecimal.valueOf(20.00), response.getTotalAmount());
         assertEquals("Pizza Hut", response.getRestaurantName());
-
-        // Verify Inventory Deducted (5 - 2 = 3)
         assertEquals(3, mockItem.getAvailableQuantity());
+
         verify(menuItemRepo, times(1)).save(mockItem);
     }
 }

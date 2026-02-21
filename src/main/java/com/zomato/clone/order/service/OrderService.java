@@ -16,6 +16,7 @@ import com.zomato.clone.restaurant.repository.RestaurantRepository;
 import com.zomato.clone.user.entity.User;
 import com.zomato.clone.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
@@ -38,6 +39,7 @@ public class OrderService {
 
     private final StringRedisTemplate redisTemplate;
 
+    @Cacheable(value = "userOrders", key = "#userEmail")
     public OrderResponse placeOrder(PlaceOrderRequest request, String userEmail) {
 
         // fetch user
@@ -125,6 +127,7 @@ public class OrderService {
     }
 
 
+    @Cacheable(value = "userOrders", key = "#userEmail")
     public List<OrderResponse> getUserOrders(String userEmail) {
         User user = userRepo.findByEmail(userEmail)
                 .orElseThrow();

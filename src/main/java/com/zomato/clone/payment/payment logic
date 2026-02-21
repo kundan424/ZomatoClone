@@ -1,0 +1,182 @@
+This is the specific logic that separates a "Student Project" from a "Production System."
+
+### **The Logic: "The Secure Hand-off"**
+
+In the old days, you would build a form with "Card Number" and "CVV" inputs. **Never do this.** If you touch raw credit card data, you need expensive PCI Compliance certification.
+
+Instead, we use **Stripe Checkout Sessions**.
+
+#### **The Flow (Deep Dive):**
+
+1. **The Trigger:** A user clicks "Pay Now" for Order #101 ($25.00).
+2. **The Hand-off:** Your backend calls Stripe and says: *"I need a secure payment page for $25.00. Also, here is my Order ID (metadata) so I know who paid."*
+3. **The Token:** Stripe replies with a unique **Session URL** (e.g., `checkout.stripe.com/pay/cs_test_...`) and a **Payment Intent ID** (e.g., `pi_3M9x...`).
+4. **The Audit Trail:** Before redirecting the user, your backend **MUST** save this `Payment Intent ID` in your database with status **PENDING**.
+* *Why?* Because 5 minutes later, Stripe will send a webhook saying "Payment `pi_3M9x...` was successful." If you didn't save it, you won't know which order that payment belongs to.
+
+
+5. **The Redirect:** You send the URL to the frontend, and the user leaves your site to pay on Stripe's secure page.
+
+---
+
+### **The Implementation**
+
+We will create the `PaymentService`. This service handles the conversation with Stripe.
+
+#### **Step 1: Configure API Keys**
+
+Add your Stripe Secret Key to `application.properties`. (You can get a test key from dashboard.stripe.com).
+
+**File:** `src/main/resources/application.properties`
+
+```properties
+# ... other configs ...
+stripe.api.key=sk_test_YOUR_SECRET_KEY_HERE
+
+```
+
+#### **Step 2: The Payment Service**
+
+**File:** `src/main/java/com/zomato/clone/payment/service/PaymentService.java`
+
+```java
+package com.zomato.clone.payment.service;
+
+import com.stripe.Stripe;
+import com.stripe.exception.StripeException;
+import com.stripe.model.checkout.Session;
+import com.stripe.param.checkout.SessionCreateParams;
+import com.zomato.clone.common.PaymentStatus;
+import com.zomato.clone.order.entity.Order;
+import com.zomato.clone.order.repository.OrderRepository;
+import com.zomato.clone.payment.entity.Payment;
+import com.zomato.clone.payment.repository.PaymentRepository;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+
+@Service
+@RequiredArgsConstructor
+public class PaymentService {
+
+    private final PaymentRepository paymentRepo;
+    private final OrderRepository orderRepo;
+
+    @Value("${stripe.api.key}")
+    private String stripeApiKey;
+
+    // Initialize Stripe with the Secret Key on startup
+    @PostConstruct
+    public void init() {
+        Stripe.apiKey = stripeApiKey;
+    }
+
+    @Transactional
+    public String createPaymentLink(Long orderId) throws StripeException {
+        // 1. Validate the Order
+        Order order = orderRepo.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        // 2. Build the Stripe Session (The "Checkout Page")
+        SessionCreateParams params = SessionCreateParams.builder()
+                .setMode(SessionCreateParams.Mode.PAYMENT)
+                .setSuccessUrl("http://localhost:3000/payment/success?session_id={CHECKOUT_SESSION_ID}") // Frontend Success Page
+                .setCancelUrl("http://localhost:3000/payment/cancel") // Frontend Cancel Page
+                .addLineItem(
+                        SessionCreateParams.LineItem.builder()
+                                .setQuantity(1L)
+                                .setPriceData(
+                                        SessionCreateParams.LineItem.PriceData.builder()
+                                                .setCurrency("usd") // or "inr"
+                                                .setUnitAmount(order.getTotalAmount().multiply(BigDecimal.valueOf(100)).longValue()) // Convert to cents
+                                                .setProductData(
+                                                        SessionCreateParams.LineItem.PriceData.ProductData.builder()
+                                                                .setName("Zomato Clone Order #" + order.getId())
+                                                                .build()
+                                                )
+                                                .build()
+                                )
+                                .build()
+                )
+                // METADATA: This is crucial for matching the payment later in Webhooks
+                .putMetadata("order_id", order.getId().toString())
+                .build();
+
+        // 3. Call Stripe API
+        Session session = Session.create(params);
+
+        // 4. Save the "Promise" of Payment (Status: PENDING)
+        // We save the PaymentIntentId so we can verify it later
+        Payment payment = Payment.builder()
+                .order(order)
+                .stripePaymentIntentId(session.getPaymentIntent()) // The ID needed for tracking
+                .amount(order.getTotalAmount())
+                .status(PaymentStatus.PENDING)
+                .build();
+
+        paymentRepo.save(payment);
+
+        // 5. Return the URL so Frontend can redirect the user
+        return session.getUrl();
+    }
+}
+
+```
+
+#### **Step 3: The Payment Controller**
+
+Expose this logic to your frontend.
+
+**File:** `src/main/java/com/zomato/clone/payment/controller/PaymentController.java`
+
+```java
+package com.zomato.clone.payment.controller;
+
+import com.stripe.exception.StripeException;
+import com.zomato.clone.payment.service.PaymentService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/payments")
+@RequiredArgsConstructor
+public class PaymentController {
+
+    private final PaymentService paymentService;
+
+    // POST /api/payments/checkout/101
+    @PostMapping("/checkout/{orderId}")
+    public ResponseEntity<Map<String, String>> createCheckoutSession(@PathVariable Long orderId) {
+        try {
+            String paymentUrl = paymentService.createPaymentLink(orderId);
+            return ResponseEntity.ok(Map.of("url", paymentUrl));
+        } catch (StripeException e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+}
+
+```
+
+### **Checkpoint**
+
+At this exact moment:
+
+1. Frontend calls `POST /api/payments/checkout/101`.
+2. Backend talks to Stripe  gets a URL.
+3. Backend saves a record: `Order 101 | Status: PENDING | Intent: pi_3M9x...`.
+4. User is redirected to Stripe to pay.
+
+**But we are missing the final piece:** How do we know if they actually paid?
+They might close the browser tab, or their card might decline. We cannot update the Order Status to `CONFIRMED` yet.
+
+**Next Step:** We need to build the **Webhook Listener**—the endpoint that listens for Stripe's "Success" message to update the database securely.
+
+**Shall we implement the `StripeWebhookController` now?**
