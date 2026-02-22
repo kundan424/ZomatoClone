@@ -1,6 +1,7 @@
 package com.zomato.clone.restaurant.service;
 
 import com.zomato.clone.enums.UserRole;
+import com.zomato.clone.order.dto.MenuItemResponse;
 import com.zomato.clone.restaurant.dto.CreateRestaurantRequest;
 import com.zomato.clone.restaurant.dto.MenuItemRequest;
 import com.zomato.clone.restaurant.entity.MenuItem;
@@ -18,6 +19,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 /**
  * RestaurantService contains business logic related to restaurants
@@ -62,7 +65,7 @@ public class RestaurantService {
      * @param userEmail email of the authenticated user
      * @return newly created Restaurant entity
      * @throws UsernameNotFoundException if user does not exist
-     * @throws RuntimeException if user is not a restaurant owner
+     * @throws RuntimeException          if user is not a restaurant owner
      */
     @Transactional
 
@@ -106,7 +109,7 @@ public class RestaurantService {
      * @throws RuntimeException if user is not the restaurant owner
      */
     @Transactional
-    @CacheEvict(value = "menu" , key = "#restaurantId")
+    @CacheEvict(value = "menu", key = "#restaurantId")
     public MenuItem addMenuItem(Long restaurantId, MenuItemRequest request, String userEmail) {
         Restaurant restaurant = restaurantRepo.findById(restaurantId)
                 .orElseThrow(() -> new RuntimeException("Restaurant not found"));
@@ -152,7 +155,24 @@ public class RestaurantService {
      */
     // CACHE: This reads from Redis first!
     @Cacheable(value = "menu", key = "#restaurantId")
-    public List<MenuItem> getMenu(Long restaurantId) {
-        return menuItemRepo.findByRestaurantId(restaurantId);
+    public List<MenuItemResponse> getMenu(Long restaurantId) {
+        List<MenuItem> entities = menuItemRepo.findByRestaurantId(restaurantId);
+
+        return entities.stream()
+                .map(this::mapToDto)
+                .collect(Collectors.toList());
     }
+
+    private MenuItemResponse mapToDto(MenuItem entity) {
+        return MenuItemResponse.builder()
+                .id(entity.getId())
+                .restaurantId(entity.getRestaurant() != null ? entity.getRestaurant().getId() : null)
+                .name(entity.getName())
+                .description(entity.getDescription())
+                .price(entity.getPrice())
+                .availableQuantity(entity.getAvailableQuantity())
+                .isAvailable(entity.getIsAvailable())
+                .build();
+    }
+
 }

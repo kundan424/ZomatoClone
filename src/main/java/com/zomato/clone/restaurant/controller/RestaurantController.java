@@ -1,5 +1,6 @@
 package com.zomato.clone.restaurant.controller;
 
+import com.zomato.clone.order.dto.MenuItemResponse;
 import com.zomato.clone.restaurant.dto.CreateRestaurantRequest;
 import com.zomato.clone.restaurant.dto.MenuItemRequest;
 import com.zomato.clone.restaurant.entity.MenuItem;
@@ -115,7 +116,7 @@ public class RestaurantController {
      * @return list of menu items for the restaurant
      */
     @GetMapping("/{restaurantId}/menu")
-    public ResponseEntity<List<MenuItem>> getMenu(
+    public ResponseEntity<List<MenuItemResponse>> getMenu(
             @PathVariable Long restaurantId
     ) {
         return ResponseEntity.ok(service.getMenu(restaurantId));
