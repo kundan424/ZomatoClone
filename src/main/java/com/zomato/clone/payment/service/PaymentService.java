@@ -75,11 +75,12 @@ public class PaymentService {
 
         Payment payment = Payment.builder()
                 .order(order)
-                .stripePaymentIntentId(session.getPaymentIntent()) // The ID needed for tracking
+                .stripeSessionId(session.getId())
                 .amount(order.getTotalAmount())
                 .status(PaymentStatus.PENDING)
                 .build();
 
+        System.out.println("PaymentIntent: " + session.getPaymentIntent());
         paymentRepo.save(payment);
 
         // 5. return the url so Frontend can redirect the user
@@ -87,16 +88,28 @@ public class PaymentService {
     }
 
     @Transactional
-    public void handleSuccessfulPayment(String orderStringId) {
+    public void handleSuccessfulPayment(
+            String orderStringId,
+            String sessionId,
+            String paymentIntentId
+    ) {
         long orderId = Long.parseLong(orderStringId);
 
-        //1. find the payment record
-        Payment payment = paymentRepo.findByOrderId(orderId)
-                .orElseThrow(() -> new RuntimeException("Payment record not found for Order: " + orderId));
+        System.out.println("Searching payment by sessionId...");
+
+        // 1.
+        Payment payment = paymentRepo.findByStripeSessionId(sessionId)
+                .orElseThrow(() -> new RuntimeException("Payment not found"));
 
         // 2. find the order record
         Order order = orderRepo.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+
+        payment.setStripePaymentIntentId(paymentIntentId);
+
+
+        System.out.println("Session ID from webhook: " + sessionId);
+        System.out.println("PaymentIntent ID: " + paymentIntentId);
 
         // 3. update status
         payment.setStatus(PaymentStatus.SUCCESS);
@@ -107,5 +120,33 @@ public class PaymentService {
         orderRepo.save(order);
 
         System.out.println("✅ Payment Confirmed for Order ID: " + orderId);
+    }
+
+    @Transactional
+    public void handleExpiredPayment(String orderStringId, String sessionId) {
+        long orderId = Long.parseLong(orderStringId);
+
+        System.out.println("Searching for expired payment by sessionId...");
+
+        // 1. Find the pending payment
+        Payment payment = paymentRepo.findByStripeSessionId(sessionId)
+                .orElseThrow(() -> new RuntimeException("Payment not found for session: " + sessionId));
+
+        // 2. Find the pending order
+        Order order = orderRepo.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+
+        // 3. Update statuses to FAILED and CANCELLED
+        payment.setStatus(PaymentStatus.FAILED); // Assuming you have FAILED in your PaymentStatus enum
+        order.setStatus(OrderStatus.CANCELLED);  // Assuming you have CANCELLED in your OrderStatus enum
+
+        // 4. Save to database
+        paymentRepo.save(payment);
+        orderRepo.save(order);
+
+        System.out.println("🛑 Order ID: " + orderId + " has been cancelled due to checkout expiration.");
+
+        // Note: If you locked inventory in Redis or the DB during the placeOrder step,
+        // this is exactly where you would write the code to release that inventory back to the restaurant!
     }
 }

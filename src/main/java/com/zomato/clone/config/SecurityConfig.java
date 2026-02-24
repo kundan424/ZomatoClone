@@ -82,10 +82,12 @@ public class SecurityConfig {
                                 "/api/auth/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
-                                "/api/webhooks/stripe").permitAll()
+                                "/api/webhooks/stripe",
+                                "/swagger-ui.html").permitAll()
                         // secure everything else
                         .anyRequest().authenticated()
                 )
+
                 /**
                  * Configure session management.
                  * STATELESS means:

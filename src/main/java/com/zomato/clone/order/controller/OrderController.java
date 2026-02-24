@@ -11,23 +11,23 @@ import java.security.Principal;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/orders")
 @RequiredArgsConstructor
-public class OrderController {
+public class OrderController implements OrderApi {
 
     private final OrderService service;
 
     // 1. Place Order (Authenticated User)
-    @PostMapping
+    @Override
     public ResponseEntity<OrderResponse> placeOrder(
-            @RequestBody PlaceOrderRequest request,
+            PlaceOrderRequest request,
             Principal principal
     ) {
         return ResponseEntity.ok(service.placeOrder(request, principal.getName()));
     }
 
     // 2. Get My Order History
-    @GetMapping
+
+    @Override
     public ResponseEntity<List<OrderResponse>> getMyOrders(Principal principal) {
         return ResponseEntity.ok(service.getUserOrders(principal.getName()));
     }

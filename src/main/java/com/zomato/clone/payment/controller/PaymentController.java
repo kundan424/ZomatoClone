@@ -14,14 +14,14 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/payments")
 @RequiredArgsConstructor
-public class PaymentController {
+public class PaymentController implements PaymentApi{
 
     private final PaymentService paymentService;
 
     // POST /api/payments/checkout/1
-    @PostMapping("/checkout/{orderId}")
+    @Override
     public ResponseEntity<Map<String, String>> createCheckoutSession(
-            @PathVariable Long orderId) {
+            Long orderId) {
         try {
             String paymentLink = paymentService.createPaymentLink(orderId);
             return ResponseEntity.ok(Map.of("url", paymentLink));

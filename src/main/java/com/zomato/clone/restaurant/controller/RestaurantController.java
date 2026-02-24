@@ -31,9 +31,8 @@ import java.util.List;
  */
 
 @RestController
-@RequestMapping("api/restaurants")
 @RequiredArgsConstructor
-public class RestaurantController {
+public class RestaurantController implements MenuApi {
 
     private final RestaurantService service;
 
@@ -115,9 +114,9 @@ public class RestaurantController {
      * @param restaurantId ID of the restaurant
      * @return list of menu items for the restaurant
      */
-    @GetMapping("/{restaurantId}/menu")
+    @Override
     public ResponseEntity<List<MenuItemResponse>> getMenu(
-            @PathVariable Long restaurantId
+            Long restaurantId
     ) {
         return ResponseEntity.ok(service.getMenu(restaurantId));
     }
