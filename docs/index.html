@@ -2,29 +2,162 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Project Documentation</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zomato Clone - Backend Architecture</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h>Project overview</h>
-<p>This backend is built using Spring Boot...</p>
 
-<h2>Architecture</h2>
-<p>Layered architecture with Controller, Service, Repository...</p>
+<header>
+    <h1>Zomato Clone Backend Engine</h1>
+    <p>A highly scalable, secure, and event-driven food delivery API.</p>
+</header>
 
-<h2>Challenges Faced</h2>
-<ul>
-    <li>JWT authentication setup</li>
-    <li>Exception handling design</li>
-    <li>Database relationship mapping</li>
-</ul>
+<div class="container">
 
-<h2>What I Learned</h2>
-<ul>
-    <li>Spring Security deep understanding</li>
-    <li>OpenAPI documentation</li>
-    <li>REST API design best practices</li>
-</ul>
+    <section>
+        <h2>Project Overview</h2>
+        <p>This is the core engine of a food delivery platform. I built it to handle the entire journey of an order—from a user securely logging in and browsing menus, to locking down inventory, processing real payments, and updating the kitchen. My main goal was to build something that wouldn't crash or double-charge people during a busy Friday night dinner rush.</p>
+        <div class="tech-stack">
+            <span class="badge">Java 21</span>
+            <span class="badge">Spring Boot</span>
+            <span class="badge">PostgreSQL</span>
+            <span class="badge">Redis</span>
+            <span class="badge">Stripe API</span>
+            <span class="badge">Spring Security (JWT)</span>
+            <span class="badge">Docker</span>
+            <span class="badge">Swagger/OpenAPI</span>
+        </div>
+        <br>
+        <a href="api.html" class="btn">View Interactive API Docs</a>
+    </section>
 
-<a href="api.html">View API Documentation</a>
+    <section>
+        <h2>How the Complete System Works (Step-by-Step)</h2>
+        <p><em>Click through the steps below to follow the exact journey of a single food order traveling through the backend architecture.</em></p>
+
+        <div class="accordion">
+            <div class="accordion-item">
+                <button class="accordion-header">Step 1: The Front Door (Spring Security & JWT)</button>
+                <div class="accordion-content">
+                    <p>When the React frontend sends an HTTP request, it doesn't just walk right in. It hits my Spring Security Filter Chain first. If the user is trying to place an order, the system extracts their JSON Web Token (JWT), validates the cryptographic signature, and sets up a secure context. If the token is missing or expired, the request is instantly rejected with a 403 Forbidden status.</p>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <button class="accordion-header">Step 2: The API Contracts (Interface-Driven Controllers)</button>
+                <div class="accordion-content">
+                    <p>Once cleared by security, the request arrives at the Controller layer. Because I use an API-First design, the request is validated against strict Java Interfaces. This ensures the incoming JSON payload perfectly matches the OpenAPI documentation. If the data is malformed, my Global Exception Handler intercepts it and returns a clean error message before any business logic even runs.</p>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <button class="accordion-header">Step 3: The Brains & Memory (Services & Caching)</button>
+                <div class="accordion-content">
+                    <p>Next, the request enters the Service layer. If the user is simply browsing the restaurant menu, the application bypasses the database entirely and serves the data directly from the Redis Cache for lightning-fast read speeds. If the user is modifying data, the service layer orchestrates the complex business rules.</p>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <button class="accordion-header">Step 4: Locking the Kitchen (Concurrency Control)</button>
+                <div class="accordion-content">
+                    <p>If the user clicks "Checkout," things get serious. The Service layer immediately talks to Redis to establish a Distributed Lock on the specific food items. Once the inventory is secured, the system safely deducts the stock and saves a brand-new order into the PostgreSQL database with a strict "PENDING" status.</p>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <button class="accordion-header">Step 5: The Financial Handshake (Stripe API)</button>
+                <div class="accordion-content">
+                    <p>With the database primed, the backend reaches out to Stripe's servers to generate a highly secure Checkout Session. I inject the internal Order ID into Stripe's hidden metadata. The backend then returns the generated Stripe URL to the frontend, and the user is redirected away from the app to complete their payment securely.</p>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <button class="accordion-header">Step 6: The Backdoor Delivery (Asynchronous Webhooks)</button>
+                <div class="accordion-content">
+                    <p>The moment the user's credit card is approved, Stripe fires an asynchronous HTTP request (a webhook) to my server's hidden backdoor endpoint. My Webhook Controller catches this event, verifies Stripe's cryptographic signature to prevent fraud, extracts the hidden Order ID from the metadata, and finally updates the PostgreSQL database to mark the order as "SUCCESS". The kitchen is officially notified!</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <section>
+        <h2>Engineering Challenges I Solved</h2>
+        <p><em>Click on a challenge to see how I fixed it.</em></p>
+
+        <div class="accordion">
+            <div class="accordion-item">
+                <button class="accordion-header">1. The "Double Order" Race Condition</button>
+                <div class="accordion-content">
+                    <p><strong>The Problem:</strong> Imagine two people trying to order the last slice of pizza at the exact same millisecond. If we only rely on the database, both orders might go through!</p>
+                    <p><strong>The Fix:</strong> I implemented a Redis Distributed Lock using the <code>setIfAbsent</code> command. It instantly locks the menu item to the first user, deducts the inventory, and then unlocks it. No more ghost pizzas.</p>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <button class="accordion-header">2. The Silent Stripe Assassin</button>
+                <div class="accordion-content">
+                    <p><strong>The Problem:</strong> My frontend was processing payments, but the database order stayed stuck in "Pending". Stripe was sending the webhook, but Spring Boot was silently dropping it because of a hidden API version mismatch.</p>
+                    <p><strong>The Fix:</strong> I wrote a robust fallback method using Stripe's "unsafe extraction" mechanism. Now, even if versions mismatch, the system forces the data extraction and updates the database correctly.</p>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <button class="accordion-header">3. The Stale Data Trap (Caching Bugs)</button>
+                <div class="accordion-content">
+                    <p><strong>The Problem:</strong> I added Spring Cache to make loading order histories blazing fast. It worked too well—when a user placed a new order, they couldn't see it because the system kept serving the old cached data!</p>
+                    <p><strong>The Fix:</strong> I redesigned the cache layer. I kept <code>@Cacheable</code> for reading data, but injected targeted <code>@CacheEvict</code> annotations on the checkout methods to instantly wipe the old memory the second a new order is placed.</p>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <button class="accordion-header">4. DTO Mapping Madness</button>
+                <div class="accordion-content">
+                    <p><strong>The Problem:</strong> Writing manual getters and setters to convert my massive Database Entities into clean Frontend JSON objects was tedious, messy, and prone to typos.</p>
+                    <p><strong>The Fix:</strong> I integrated MapStruct. It automatically generates the mapping code at compile time. This kept my service layer incredibly clean and strictly separated my database layer from the outside world.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2>Core Technical Learnings</h2>
+        <p><em>Click to explore my key takeaways.</em></p>
+
+        <div class="accordion">
+            <div class="accordion-item">
+                <button class="accordion-header">1. Spring Security acts like a VIP Bouncer</button>
+                <div class="accordion-content">
+                    <p>I learned that modern APIs don't use simple passwords for every request. I configured a stateless JWT (JSON Web Token) system. I learned how to tweak the <code>SecurityFilterChain</code> to safely let webhooks and documentation through the "front door" for free, while strictly demanding valid tokens for checkout routes.</p>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <button class="accordion-header">2. Catching Errors Gracefully</button>
+                <div class="accordion-content">
+                    <p>Nobody likes seeing a massive, scary Java stack trace on a webpage. I mastered <code>@RestControllerAdvice</code> to catch crashes globally. Now, if someone tries to order an item that doesn't exist, the system catches it and sends the frontend a polite, clean JSON error message instead of crashing.</p>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <button class="accordion-header">3. API-First Design</button>
+                <div class="accordion-content">
+                    <p>I realized that controllers get messy fast when you mix routing, documentation, and logic. I extracted all my Swagger annotations and HTTP routes into pure Java Interfaces. This forces me to design the "contract" first, making my actual controllers beautifully simple.</p>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <button class="accordion-header">4. Cloud-Native Tunnels via Docker</button>
+                <div class="accordion-content">
+                    <p>To test Stripe webhooks, Stripe's servers needed to talk directly to my local laptop. I learned how to spin up the Stripe CLI inside a Docker container to punch a secure tunnel through to my localhost, giving me hands-on experience with modern DevOps workflows.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+<script src="script.js"></script>
 </body>
 </html>
