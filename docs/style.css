@@ -16,6 +16,7 @@ body {
     padding: 0;
 }
 
+
 header {
     background-color: var(--primary-color);
     color: white;
@@ -155,4 +156,9 @@ h2 {
     margin-bottom: 10px;
     font-size: 0.95rem;
     color: #555;
+}
+
+.links{
+    display: flex;
+    justify-content: space-between;
 }
